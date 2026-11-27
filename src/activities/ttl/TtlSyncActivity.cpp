@@ -252,6 +252,9 @@ void TtlSyncActivity::runSync() {
   };
 
   const TtlSyncRunResult result = ttlRunSync(callbacks);
+  // The pump callback sets goHomeRequested_ on the home gesture. cppcheck does
+  // not follow that function pointer, so it treats the flag as still false.
+  // cppcheck-suppress knownConditionTrueFalse
   if (goHomeRequested_) {
     onGoHome(HomeMenuItem::TTL_SYNC);
     return;

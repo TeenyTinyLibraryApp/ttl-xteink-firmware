@@ -7,6 +7,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -19,9 +20,7 @@ namespace {
 
 void logLine(const std::string& message) {
   std::string clean = message;
-  for (char& c : clean) {
-    if (c == '\n' || c == '\r') c = ' ';
-  }
+  std::replace_if(clean.begin(), clean.end(), [](const char c) { return c == '\n' || c == '\r'; }, ' ');
   ttlAppendSyncLog(clean);
 }
 
