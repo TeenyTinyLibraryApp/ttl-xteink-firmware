@@ -1,0 +1,27 @@
+Teeny Tiny Library firmware (TTL)
+Copyright (c) 2026 Teeny Tiny Library contributors
+
+This project is an independent community fork of CrossPoint Reader.
+It is not affiliated with Xteink, and it is not an official Xteink product.
+
+CrossPoint Reader
+Copyright (c) 2025 CrossPoint Reader organization
+
+CrossPoint's original source is licensed under the MIT License. The MIT text
+and the upstream copyright notice are in the root LICENSE file. New source
+files added by Teeny Tiny Library are also MIT, copyright 2026 Teeny Tiny
+Library contributors, unless a file states a different upstream license.
+
+The combined firmware executable is licensed under the GNU General Public
+License, version 3 or any later version (GPL-3.0-or-later). That applies
+because the firmware includes wolfSSL and wolfCrypt, which are GPL-2.0-or-later.
+This project selects GPLv3 for the combined binary.
+
+Third-party components keep their own licenses. The attribution table,
+including wolfSSL, Arduino-ESP32, FreeType, and the font notices, is in
+licenses/README.md. A release build can collect the installed dependency
+notices with scripts/build_release_license.py.
+
+Corresponding source for a binary includes this repository and the freeink-sdk
+submodule commit recorded in the tree. Do not ship proprietary SDKs, secrets,
+tokens, or personal credentials with the source or the binary.

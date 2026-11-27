@@ -27,9 +27,11 @@
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
-#include "OtaUpdateActivity.h"
 #include "SdCardFontSystem.h"
+#ifndef TTL_DISABLE_FIRMWARE_OTA
+#include "OtaUpdateActivity.h"
 #include "SdFirmwareUpdateActivity.h"
+#endif
 #include "SettingsList.h"
 #include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
@@ -202,6 +204,9 @@ void SettingsActivity::rebuildSettings() {
   addAction(SettingsSection::Network, StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser);
   addAction(SettingsSection::Network, StrId::STR_PLUGINS, SettingAction::Plugins);
 
+  // TTL 0.1.0 is a recovery baseline: firmware update checks and SD flashing
+  // stay out of the menu. USB flashing of this build is the fallback.
+#ifndef TTL_DISABLE_FIRMWARE_OTA
   // OTA fetches this board's own release asset (see OtaUpdater); boards whose
   // asset isn't published yet just report no update available. The Picco's
   // stock layout has one app slot (partitions_picco.csv), so it cannot update
@@ -210,6 +215,7 @@ void SettingsActivity::rebuildSettings() {
     addAction(SettingsSection::General, StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates);
     addAction(SettingsSection::General, StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate);
   }
+#endif
   addAction(SettingsSection::General, StrId::STR_ABOUT, SettingAction::About);
   rebuildRowItems();
 }
@@ -466,10 +472,18 @@ void SettingsActivity::toggleSelectedSetting() {
         break;
       }
       case SettingAction::CheckForUpdates:
+#ifndef TTL_DISABLE_FIRMWARE_OTA
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
+#else
+        LOG_INF("SET", "Firmware update is not part of TTL 0.1.0");
+#endif
         break;
       case SettingAction::SdFirmwareUpdate:
+#ifndef TTL_DISABLE_FIRMWARE_OTA
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
+#else
+        LOG_INF("SET", "SD firmware update is not part of TTL 0.1.0");
+#endif
         break;
       case SettingAction::DownloadFonts:
         startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),

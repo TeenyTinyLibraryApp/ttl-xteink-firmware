@@ -36,3 +36,9 @@ lib/EpdFont/scripts/output/
 sdkconfig.sticky
 sdkconfig.x4pro
 flake.*
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+secrets.json

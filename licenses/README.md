@@ -1,5 +1,17 @@
 # Firmware licenses
 
+Teeny Tiny Library firmware (`TTL 0.1.0`) is an independent community fork of
+CrossPoint Reader. It is not affiliated with Xteink. CrossPoint's original code
+stays under the MIT license in the root `LICENSE` file, with the upstream
+copyright notices kept. New TTL source files are MIT, copyright 2026 Teeny Tiny
+Library contributors.
+
+The combined firmware executable is GPL-3.0-or-later because it includes
+wolfSSL (GPL-2.0-or-later; this project selects GPLv3 for the combined binary).
+See `NOTICE`. Do not add secrets, tokens, personal credentials, or proprietary
+SDKs to this repository. `open-x4-sdk` stays ignored and is not part of the
+source.
+
 CrossPoint's original code uses the MIT license in the root `LICENSE` file.
 Third-party code and assets keep their own licenses.
 The combined firmware executable uses GPLv3 because it includes wolfSSL.

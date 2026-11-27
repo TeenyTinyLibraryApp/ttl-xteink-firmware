@@ -43,8 +43,8 @@ The reported major version must be 21 or newer.
 ## Clone and initialize
 
 ```sh
-git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader
-cd crosspoint-reader
+git clone --recursive https://github.com/TeenyTinyLibraryApp/ttl-xteink-firmware
+cd ttl-xteink-firmware
 ```
 
 If you already cloned without submodules:
@@ -122,8 +122,8 @@ pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 pio run
 ```
 
-Development builds apply the Git version only to sources that use
-`CROSSPOINT_VERSION`, so a branch/SHA change does not invalidate unrelated objects.
+Development builds print the git branch and short SHA in the build log. The
+firmware version string stays `TTL 0.1.0` on every environment.
 
 ## What to read next
 

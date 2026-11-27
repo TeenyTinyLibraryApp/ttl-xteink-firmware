@@ -92,6 +92,11 @@ class HttpDownloader {
   static bool postForm(const std::string& url, const std::string& formBody, std::string& outResponse,
                        int* statusOut = nullptr);
 
+  // POST application/json and collect the response body (any status), capped
+  // at a few KB. The body is not logged. Returns true when the status is 2xx.
+  static bool postJson(const std::string& url, const std::string& jsonBody, std::string& outResponse,
+                       int* statusOut = nullptr);
+
   /**
    * Download a file to the SD card with optional credentials. `headers` are
    * added to the request (e.g. a Bearer Authorization), alongside any Basic

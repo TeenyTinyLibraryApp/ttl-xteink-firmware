@@ -30,7 +30,7 @@ void applyCommonClientSetup(freeink::SecureHttpClient& http) {
   // setUserAgent replaces SecureHttpClient's built-in UA; addHeader would
   // append a second User-Agent header, which strict servers reject (aiohttp
   // answers 400 "Duplicate 'User-Agent' header found").
-  http.setUserAgent("CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  http.setUserAgent("TTL-Xteink/" TTL_VERSION_NUMBER);
 }
 
 // Written after every request, and read by the UI right after a failure.
@@ -159,28 +159,46 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   return status >= 200 && status < 300 && !sinkStopped;
 }
 
-bool HttpDownloader::postForm(const std::string& url, const std::string& formBody, std::string& outResponse,
-                              int* statusOut) {
+namespace {
+
+bool postCollected(const std::string& url, const std::string& body, const char* contentType, const char* accept,
+                   std::string& outResponse, int* statusOut) {
   WifiPowerSaveGuard psGuard;
   outResponse.clear();
   freeink::SecureHttpClient http;
   if (!http.begin(url)) {
     LOG_ERR("HTTP", "bad URL: %s", url.c_str());
+    g_lastStatus = 0;
     if (statusOut) *statusOut = 0;
     return false;
   }
   applyCommonClientSetup(http);
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  http.addHeader("Content-Type", contentType);
+  if (accept != nullptr && accept[0] != '\0') http.addHeader("Accept", accept);
+  // Body stays out of the log: a login POST contains the password.
   LOG_DBG("HTTP", "wolfSSL POST: %s", url.c_str());
-  const int status = http.sendRequest("POST", reinterpret_cast<const uint8_t*>(formBody.data()), formBody.size(),
+  const int status = http.sendRequest("POST", reinterpret_cast<const uint8_t*>(body.data()), body.size(),
                                       [&outResponse](const uint8_t* data, size_t len) {
                                         const size_t room =
                                             MAX_RESPONSE_BYTES - std::min(outResponse.size(), MAX_RESPONSE_BYTES);
                                         outResponse.append(reinterpret_cast<const char*>(data), std::min(len, room));
                                         return true;
                                       });
-  if (statusOut) *statusOut = status > 0 ? status : 0;
+  g_lastStatus = status > 0 ? status : 0;
+  if (statusOut) *statusOut = g_lastStatus;
   return status >= 200 && status < 300;
+}
+
+}  // namespace
+
+bool HttpDownloader::postForm(const std::string& url, const std::string& formBody, std::string& outResponse,
+                              int* statusOut) {
+  return postCollected(url, formBody, "application/x-www-form-urlencoded", nullptr, outResponse, statusOut);
+}
+
+bool HttpDownloader::postJson(const std::string& url, const std::string& jsonBody, std::string& outResponse,
+                              int* statusOut) {
+  return postCollected(url, jsonBody, "application/json", "application/json", outResponse, statusOut);
 }
 
 HttpDownloader::DownloadError HttpDownloader::postToFile(const std::string& url, const std::string& body,

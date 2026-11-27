@@ -45,7 +45,10 @@
 #include "WifiCredentialStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#ifndef TTL_DISABLE_FIRMWARE_OTA
 #include "activities/settings/SdFirmwareUpdateActivity.h"
+#endif
+#include "ttl/TtlSyncStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
@@ -781,6 +784,7 @@ void setup() {
   RECENT_BOOKS.loadFromFile();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
+  TTL_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
   OPDS_TOKENS.loadFromFile();
   LCP_PASSPHRASES.loadFromFile();
@@ -862,7 +866,7 @@ void setup() {
     SETTINGS.doublePwrBtn = CrossPointSettings::IGNORE;
   }
 
-  LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
+  LOG_DBG("MAIN", "Starting " CROSSPOINT_VERSION);
 
   // Apply a switch moved during sleep before the first paint, so the wake
   // screen does not draw in the old night mode and then repaint.
@@ -914,11 +918,14 @@ void setup() {
   // Output polarity is resolved per render by ActivityManager (night mode
   // inverts only the reading surfaces), so nothing to restore here.
 
+#ifndef TTL_DISABLE_FIRMWARE_OTA
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
         std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInputManager, /*recoveryMode=*/true));
-  } else if (rebootedFromPanic) {
+  } else
+#endif
+      if (rebootedFromPanic) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&

@@ -193,7 +193,7 @@ build_flags =
   -DFREEINK_DEVICE_M5PAPER=1
   ; the 63KB 540x960 framebuffer lives in PSRAM (FREEINK_FB_PSRAM auto-on)
   -DBOARD_HAS_PSRAM
-  -DCROSSPOINT_VERSION=\"${crosspoint.version}-m5paper\"
+  -DCROSSPOINT_VERSION=\"TTL ${crosspoint.version}\"
   -DENABLE_SERIAL_LOG
   -DLOG_LEVEL=2
   ; touch-first device: hide front-button hint labels
@@ -215,7 +215,7 @@ build_flags =
   -DFREEINK_DEVICE_LILYGO=1
   ; board injects the parallel-bus pins + PMIC power hooks (BoardT5S3)
   -DFREEINK_LGFX_EPD_CONFIG=lilygoT5S3LgfxConfig
-  -DCROSSPOINT_VERSION=\"${crosspoint.version}-lilygo\"
+  -DCROSSPOINT_VERSION=\"TTL ${crosspoint.version}\"
   -DENABLE_SERIAL_LOG
   -DLOG_LEVEL=2
   -DCROSSPOINT_SHOW_BUTTON_HINTS=0

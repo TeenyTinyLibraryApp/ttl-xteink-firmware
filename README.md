@@ -1,3 +1,40 @@
+# Teeny Tiny Library firmware
+
+Independent community firmware for the Xteink X4 (the X3 profile stays in the
+same tree). **TTL 0.1.0** is a recovery baseline: the CrossPoint reader, plus a
+full-page **TTL Sync** screen. It is not an official Xteink product and it is
+not affiliated with Xteink.
+
+This tree is a fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader)
+(`develop` at `fb72db9614fd474153edb0a58ec78ed0f6b7e8c2`). CrossPoint's code
+stays MIT. The combined firmware binary is **GPL-3.0-or-later** because it
+includes wolfSSL. See `LICENSE`, `NOTICE`, and `licenses/README.md`.
+
+Tamil and other Indic text use CrossPoint's shaping engine. Noto Sans Tamil
+and Noto Serif Tamil install from the SD font catalog (Settings → font
+browser).
+
+**TTL 0.1.0 does not check for or flash firmware updates.** If a later build
+misbehaves, flash this version again over USB.
+
+Home → **TTL Sync** opens its own screen (Home is not kept underneath, so TLS
+has the free heap):
+
+1. Set the server if you are not using `https://teenytinylibrary.app`.
+2. Enter the account email and password. They are stored on the SD card at
+   `/.crosspoint/ttl_sync.json`, XOR-obfuscated with this device's MAC, the
+   same way Wi-Fi passwords are stored. Nothing is compiled into the firmware.
+3. Choose **Sync**. The device signs in with `POST /api/sync/login`, reads
+   `GET /api/sync/manifest`, and downloads new or changed EPUBs with
+   `GET /api/sync/download/:id` into `/TTL/`. A file already on the card with
+   the same size is skipped.
+4. Read `/TTL/ttl-sync-log.txt` on the card if a sync needs debugging.
+
+Build, flash, and host tests: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+The sections below are the upstream CrossPoint Reader guide. Where they
+describe firmware update checks, those screens are compiled out of TTL 0.1.0.
+
 # CrossPoint Reader
 
 [![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)

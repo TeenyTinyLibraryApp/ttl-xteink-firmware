@@ -1,9 +1,8 @@
 """
-PlatformIO pre-build script: inject git branch and short SHA into
-CROSSPOINT_VERSION for development environments.
+PlatformIO pre-build script for development environments.
 
-Results in a version string like:  1.1.0-dev-feat-kosync-xpath-05c6cf8
-Release environments are unaffected; they set CROSSPOINT_VERSION in the ini.
+The on-device version stays "TTL {base}" so a recovery build is recognizable.
+Branch and short SHA are printed in the build log only.
 """
 
 import configparser
@@ -88,7 +87,7 @@ def inject_version(env):
     base_version = get_base_version(project_dir)
     branch = get_git_branch(project_dir)
     short_sha = get_git_short_sha(project_dir)
-    version_string = f'{base_version}-dev-{branch}-{short_sha}'
+    version_string = f'TTL {base_version}'
 
     def add_version(build_env, node):
         # Only these translation units depend on Git metadata. Keep library and
@@ -100,7 +99,7 @@ def inject_version(env):
         return version_env.Object(node)
 
     env.AddBuildMiddleware(add_version)
-    print(f'CrossPoint build version: {version_string}')
+    print(f'TTL build version: {version_string} (git {branch} {short_sha})')
 
 
 # PlatformIO/SCons entry point — Import and env are SCons builtins injected at runtime.
