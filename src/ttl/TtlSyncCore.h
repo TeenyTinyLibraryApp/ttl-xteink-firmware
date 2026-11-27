@@ -16,13 +16,14 @@
 
 namespace ttl {
 
-inline constexpr const char kVersionNumber[] = "0.1.1";
-inline constexpr const char kVersionLabel[] = "TTL 0.1.1";
+inline constexpr const char kVersionNumber[] = "0.2.0";
+inline constexpr const char kVersionLabel[] = "TTL 0.2.0";
 inline constexpr const char kDefaultServerUrl[] = "https://teenytinylibrary.app";
 inline constexpr const char kBookDirectory[] = "/TTL";
 inline constexpr const char kSyncLogPath[] = "/TTL/ttl-sync-log.txt";
-// v0.1.1 is the recovery baseline: no firmware update checks or flashing UI.
-inline constexpr bool kFirmwareOtaEnabled = false;
+// Portal OTA is offered from the TTL Sync screen. The GitHub updater stays
+// behind TTL_DISABLE_FIRMWARE_OTA so that path adds no flash.
+inline constexpr bool kFirmwareOtaEnabled = true;
 
 inline constexpr size_t kMaxServerUrl = 200;
 inline constexpr size_t kMaxEmail = 128;
@@ -71,6 +72,40 @@ std::string ttlBuildLoginJson(const std::string& email, const std::string& passw
 
 // Accepts a JSON array of book objects. Unknown fields are ignored.
 bool ttlParseManifest(const std::string& json, std::vector<TtlBook>& books, std::string& error);
+
+struct TtlFirmwareManifest {
+  std::string device;
+  std::string version;
+  std::string filename;
+  std::string downloadUrl;
+  uint64_t size = 0;
+  std::string sha256;
+  std::string notes;
+};
+
+// Negative when a < b, zero when equal, positive when a > b.
+// Strips a leading "TTL " and a single leading v, then compares MAJOR.MINOR.PATCH.
+int compareSemVer(const std::string& a, const std::string& b);
+
+std::string ttlFirmwareLatestUrl(const std::string& server);
+
+// Parses one /api/firmware/latest object and rejects an unusable manifest.
+bool ttlParseFirmwareManifest(const std::string& json, TtlFirmwareManifest& manifest, std::string& error);
+
+// version non-empty, download URL http(s), size > 0, sha256 64 hex digits.
+bool ttlFirmwareManifestUsable(const TtlFirmwareManifest& manifest, std::string& error);
+
+// "0.2.0" and "v0.2.0" become "TTL 0.2.0". A value that already starts with "TTL " is kept.
+std::string ttlVersionLabel(const std::string& version);
+
+// Rounded half-up to a tenth of a mebibyte, e.g. 5757440 -> "5.5 MB".
+std::string ttlFormatFirmwareSize(uint64_t bytes);
+
+// One line, clipped on a UTF-8 boundary. Adds "..." when it does not fit.
+std::string ttlClipNote(const std::string& notes, size_t maxBytes);
+
+// Case-insensitive match of a raw SHA-256 digest against a 64-digit hex string.
+bool ttlSha256HexMatches(const uint8_t* digest, size_t digestLen, const std::string& hex);
 
 // httpStatus 0 means the request never completed. Token characters are limited
 // to the portal's base64url alphabet.
