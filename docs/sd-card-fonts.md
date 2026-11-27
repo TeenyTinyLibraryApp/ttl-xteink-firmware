@@ -1,0 +1,315 @@
+# SD Card Fonts
+
+CrossPoint supports loading additional fonts from the SD card, including fonts
+with extended Unicode coverage (CJK, Cyrillic, Greek, etc.).
+
+If CrossPoint enables external RAM on your device, you can load `.ttf`, `.otf`,
+and `.ttc` files directly. Otherwise, convert them to `.cpfont` files first.
+All devices can use `.cpfont` files.
+
+The font releases include a `LICENSE` file with the original font notices.
+If you distribute font copies, keep the applicable notices with those copies.
+The source notices are in [licenses/fonts.txt](../licenses/fonts.txt).
+
+## Installing Fonts
+
+There are three ways to install `.cpfont` fonts. On devices with external RAM,
+you can copy TTF, OTF, and TTC files to the SD card. You can also upload TTF and
+OTF files through File Transfer.
+
+### Option 1: Download from device (recommended)
+
+1. Connect your CrossPoint reader to Wi-Fi
+2. Go to **Settings > Reader > Manage Fonts**
+3. Browse available font families and tap to download
+4. Downloaded fonts appear immediately in **Settings > Reader > Font Family**
+
+### Option 2: Upload via web browser
+
+1. Start **File Transfer** and connect through **Join Network** or **Create Hotspot**
+2. Open the web interface URL shown on the reader
+3. Navigate to the **Fonts** tab
+4. Upload `.cpfont` files, or upload `.ttf` and `.otf` files on a device with external RAM
+
+### Option 3: Manual SD card copy
+
+1. Download font files from the
+   [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts)
+2. Copy font family folders to one of two locations on your SD card:
+
+   - `/.fonts/` — hidden directory (preferred; keeps the SD root tidy
+     when mounted on a desktop)
+   - `/fonts/` — visible directory (use this if your OS hides dot-files
+     and you'd rather see the folder in your file manager)
+
+   Both roots are always scanned at boot and the results are merged: a
+   family installed in `/fonts/` shows up even when `/.fonts/` also
+   exists, and vice versa. The two roots only collide if the same family
+   name appears in both — in that case the copy in `/.fonts/` wins and
+   the duplicate in `/fonts/` is ignored.
+
+       SD Card Root/
+       ├── .fonts/                     ← Hidden root (preferred)
+       │   └── Literata/
+       │       ├── Literata_12.cpfont
+       │       ├── Literata_14.cpfont
+       │       ├── Literata_16.cpfont
+       │       └── Literata_18.cpfont
+       └── fonts/                      ← Visible root (equally valid)
+           └── Merriweather/
+               ├── Merriweather_12.cpfont
+               └── ...
+
+3. Insert the SD card and power on your CrossPoint reader
+
+### Direct TTF/OTF/TTC fonts
+
+If CrossPoint enables external RAM on your device, copy a `.ttf`, `.otf`, or
+`.ttc` file directly into `/fonts/` or `/.fonts/`. The filename without its
+extension becomes the family name. For example, `/fonts/Bookerly.ttf` appears as
+`Bookerly` in **Settings > Reader > Font Family**.
+
+For a family with separate styles, put its files in one subfolder. The folder
+name becomes the family name. For example:
+
+    /fonts/Bookerly/Bookerly-Regular.ttf
+    /fonts/Bookerly/Bookerly-Bold.ttf
+    /fonts/Bookerly/Bookerly-Italic.ttf
+    /fonts/Bookerly/Bookerly-BoldItalic.ttf
+
+The reader selects regular, bold, italic, and bold italic faces from the font
+files. One regular file is enough; the reader derives missing styles. A `.cpfont`
+file in the same family folder takes priority over TTF/OTF/TTC files, so keep
+the two formats in separate folders. If both font roots contain the same family
+name, the copy in `/.fonts/` takes priority.
+
+Direct fonts use the standard reader sizes: 12, 14, 16, and 18 pt. On devices
+with external RAM, the **Fonts** tab in File Transfer accepts `.ttf` and `.otf`
+uploads as well as `.cpfont` files. To remove a loose font file, delete that
+file from the SD card. The Fonts page can delete families stored in subfolders.
+
+## Menu Fonts
+
+Choose a font under **Settings > Display > UI Font**, below **UI Theme**.
+A `.cpfont` family appears in the picker if it includes 8, 10, and 12 pt files.
+These sizes match the three menu font sizes. If an older install is missing
+a size, update the family in **Manage Fonts** or add the missing files manually.
+On devices that support vector fonts, installed TTF, OTF, and TTC families also
+appear in the picker.
+
+The selected font is used for menus, library titles, and other interface text.
+The reader uses the built-in font for any characters missing from the selected
+font. If neither font covers a character, the reader skips it. Choose
+**Default** to restore the built-in menu fonts. USB Drive uses built-in fonts.
+File Transfer switches to built-in fonts when the web server starts.
+
+## Non-Latin Scripts Fallback in the User Interface
+
+The built-in UI fonts lack characters from scripts such as Chinese, Japanese,
+and Korean. The reader can show replacement boxes in titles and file names
+even when the book text itself renders correctly.
+
+When **UI Font** is set to **Default**, CrossPoint can reuse the font you
+selected for reading. If a title contains a character the built-in font
+cannot draw, CrossPoint can use your SD card font for the whole title.
+
+The fallback is **size-matched**. The built-in UI fonts render at 8 pt
+(small/author lines), 10 pt (list rows) and 12 pt (book-cover titles, headers),
+so CrossPoint loads your SD family at those sizes too and maps each UI font to
+its same-size SD font. Non-Latin book names therefore appear at the same size
+as the Latin text around them. A `.cpfont` family must contain files at sizes
+**8, 10 and 12** for this UI fallback (in addition to the reader sizes 12–18) —
+**missing these is the most common reason non-Latin UI text still shows
+replacement boxes even though the book itself renders fine.** Any missing UI
+size keeps showing boxes for that script at that size. Direct TTF/OTF/TTC
+families use the same file at all three UI sizes.
+
+These UI sizes only take effect if the reader-size font also matches one of
+CrossPoint's built-in fallback-detection codepoints — see `kFallbackProbes` in
+`src/SdCardFontSystem.cpp` for the current list, plus one probe per Indic
+script (`indic::SCRIPTS`). A script outside those gets no UI fallback even with
+the correct `.cpfont` sizes present.
+
+For `.cpfont` families, **Settings > Reader > Font Size** lists every size the family ships,
+so a family built at 8,10,12,14,16,18 offers all six as reading sizes — the UI
+sizes are not hidden from the list. Reading at 8 pt is your call; if you would
+rather not see the small sizes there, convert two families (one with the UI
+sizes for fallback, one with only the reading sizes you want).
+
+When converting your own font, include the UI sizes:
+
+    python3 lib/EpdFont/scripts/fontconvert_sdcard.py \
+      MyCJKFont-Regular.otf \
+      --intervals cjk \
+      --sizes 8,10,12,14,16,18 \
+      --style regular \
+      --name MyCJKFont \
+      --output-dir ./MyCJKFont/
+
+With **UI Font** set to **Default**:
+
+- Select a non-Latin-capable SD font under **Settings > Reader > Font Family**
+  (see [Installing Fonts](#installing-fonts) and the interval presets for
+  `.cpfont` under [Converting Custom Fonts](#converting-custom-fonts)). That
+  single selection drives both book content *and* size-matched fallback in
+  the UI.
+- Pure-Latin UI strings keep the crisp built-in font; only strings that
+  actually contain a character the built-in font lacks are routed to the SD
+  font.
+- The fallback is per *string*, not per glyph: a mixed title such as
+  `三体 Vol.1` renders entirely in the SD font (including the Latin part). If
+  that SD font is a `Mono` family, the Latin portion will appear half/full
+  width.
+- If no SD font is selected (a built-in reading font is active), there is no
+  fallback and the UI again shows boxes for non-Latin text — pick an SD font
+  covering that script to restore it.
+
+## Indic scripts
+
+Indic scripts need shaping: vowel signs move around their consonants,
+consonant clusters join into conjuncts (क्ष, ক্ষ, ஸ்ரீ), ra + virama becomes
+a reph above the next letter, and marks sit where the font places them.
+CrossPoint shapes these scripts with its own OpenType shaper (`lib/OtShaper`),
+which follows HarfBuzz's Indic and Universal Shaping Engine rules and is tested
+to produce identical glyphs, using the font's own OpenType tables, on every
+device:
+
+| Script | Languages (examples) | Preset | Download families |
+|---|---|---|---|
+| Devanagari | Hindi, Marathi, Nepali, Sanskrit, Konkani | `devanagari` | `NotoSansDevanagari`, `NotoSerifDevanagari` |
+| Bengali | Bengali (Bangla), Assamese, Manipuri | `bengali` | `NotoSansBengali`, `NotoSerifBengali` |
+| Gurmukhi | Punjabi | `gurmukhi` | `NotoSansGurmukhi`, `NotoSerifGurmukhi` |
+| Gujarati | Gujarati | `gujarati` | `NotoSansGujarati`, `NotoSerifGujarati` |
+| Odia | Odia (Oriya) | `oriya` | `NotoSansOriya`, `NotoSerifOriya` |
+| Tamil | Tamil | `tamil` | `NotoSansTamil`, `NotoSerifTamil` |
+| Telugu | Telugu | `telugu` | `NotoSansTelugu`, `NotoSerifTelugu` |
+| Kannada | Kannada, Tulu | `kannada` | `NotoSansKannada`, `NotoSerifKannada` |
+| Malayalam | Malayalam | `malayalam` | `NotoSansMalayalam`, `NotoSerifMalayalam` |
+| Sinhala | Sinhala | `sinhala` | `NotoSansSinhala`, `NotoSerifSinhala` |
+
+- **Fonts.** The families above are on the font download page and already
+  carry shaping data and Latin letters. Select one under
+  **Settings > Reader > Font Family**.
+- **Language.** Text is shaped in the book's language (its `dc:language`), so
+  fonts that draw a script differently per language get it right: Marathi and
+  Nepali use their own Devanagari letterforms and digits.
+- **Your own `.cpfont`.** Converting with a script's preset embeds the shaping
+  data automatically when the font has an OpenType `GSUB` table. Indic fonts
+  rarely include Latin letters, so add a Latin fallback, and build the UI
+  sizes as well:
+
+      python3 lib/EpdFont/scripts/fontconvert_sdcard.py \
+        --regular MyHindi-Regular.ttf --bold MyHindi-Bold.ttf \
+        --fallback-regular NotoSans-Regular.ttf --fallback-bold NotoSans-Bold.ttf \
+        --intervals devanagari,latin-ext,punctuation \
+        --sizes 8,10,12,14,16,18 \
+        --name MyHindi --output-dir ./MyHindi/
+
+  A font that covers several scripts can combine presets
+  (`--intervals devanagari,bengali,latin-ext`); its shaping data then covers
+  all of them. Pass `--no-shaping` to leave the shaping data out. Older
+  firmware ignores it, so the same files work everywhere.
+- **Direct TTF/OTF/TTC fonts** (devices with external RAM) shape straight from
+  the font file.
+- **Fonts without shaping data** still get their vowel signs in the right
+  order, but conjuncts show a visible virama (प्‌र, প্‌র).
+
+With **UI Font** set to **Default**, book titles and other interface text in
+these scripts can use the selected reader family as a size-matched fallback.
+That is why these families include 8 and 10 pt files.
+
+On the X3 and X4, the first time an Indic font is used its shaping tables
+(5-80 KB per style, depending on the script) are copied once into a reserved
+area of the device's internal flash and read from there, keeping the reader's
+RAM free. The converter warns when a font's tables exceed the 128 KB that
+area holds per font; such a font may not be shaped on those devices. That area
+is the "spiffs" flash partition: on a device whose partition is missing or
+smaller than 384 KB, only fonts whose tables are 16 KB or less (Tamil,
+Gurmukhi, Malayalam, Sinhala Sans) are shaped. Opening
+a chapter for the first time takes longer than a Latin one, because every
+word is shaped while the chapter is laid out. Page turns do no shaping: the
+shaped words are stored with the chapter's cached layout. If the device runs
+short of memory while a chapter is laid out, some of its words may stay
+unshaped; **Delete Book Cache** lays the chapter out again.
+
+## Available Pre-Built Fonts
+
+The current list of pre-built fonts is maintained in the
+[crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts).
+
+## Converting Custom Fonts
+
+To make `.cpfont` files for any device, convert your TrueType/OpenType fonts:
+
+### Prerequisites
+
+    pip install freetype-py fonttools
+
+### Single font (one style)
+
+    python3 lib/EpdFont/scripts/fontconvert_sdcard.py \
+      MyFont-Regular.ttf \
+      --intervals latin-ext \
+      --sizes 12,14,16,18 \
+      --style regular \
+      --name MyFont \
+      --output-dir ./MyFont/
+
+### Multi-style font
+
+    python3 lib/EpdFont/scripts/fontconvert_sdcard.py \
+      --regular MyFont-Regular.ttf \
+      --bold MyFont-Bold.ttf \
+      --italic MyFont-Italic.ttf \
+      --bolditalic MyFont-BoldItalic.ttf \
+      --intervals latin-ext \
+      --sizes 12,14,16,18 \
+      --name MyFont \
+      --output-dir ./MyFont/
+
+> **Using this font for non-Latin UI fallback too?** The examples above only
+> include the reader sizes (12–18). To also get fallback for this font's
+> script in the library, headers, and file browser (see
+> [Non-Latin Scripts Fallback in the User Interface](#non-latin-scripts-fallback-in-the-user-interface)),
+> add the UI sizes: `--sizes 8,10,12,14,16,18`.
+
+### Available Unicode interval presets
+
+| Preset | Coverage |
+|--------|----------|
+| `ascii` | U+0020–U+007E (Basic Latin) |
+| `latin1` | U+0080–U+00FF (Latin-1 Supplement) |
+| `latin-ext` | European languages (Latin + Extended-A/B + combining diacritical marks + punctuation + currency + letterlike symbols such as ™ and № + minus sign + ligatures) |
+| `greek` | Greek + Extended Greek |
+| `cyrillic` | Cyrillic + Supplement |
+| `hebrew` | Hebrew + Alphabetic Presentation Forms |
+| `arabic` | Arabic + Supplement + Extended-A + Presentation Forms A/B (RTL, contextual shaping) |
+| `devanagari`, `bengali`, `gurmukhi`, `gujarati`, `oriya`, `tamil`, `telugu`, `kannada`, `malayalam`, `sinhala` | One Indic script's block + dandas + joiners; embeds OpenType shaping data (see [Indic scripts](#indic-scripts)) |
+| `georgian` | Georgian + Georgian Supplement |
+| `armenian` | Armenian |
+| `ethiopic` | Ethiopic + Extended |
+| `vietnamese` | Vietnamese subset (ơ/ư and combining marks) |
+| `ipa-chars` | IPA Extensions + Spacing Modifier Letters (phonetic transcription) |
+| `punctuation` | General punctuation (U+2000–U+206F) |
+| `cjk` | CJK Unified Ideographs + Hiragana + Katakana + Fullwidth |
+| `hangul` | Korean Hangul syllables + Jamo + Compatibility Jamo |
+| `cherokee` | Cherokee (historic + supplement block) |
+| `tifinagh` | Tifinagh |
+| `symbols` | Math, currency, arrows, box-drawing, misc symbols, dingbats |
+| `reading` | Literary fiction coverage: Latin, Greek, Cyrillic, math/symbol blocks, supplemental punctuation, and CJK quote marks |
+| `builtin` | Matches the firmware's built-in font conversion intervals |
+
+Combine presets with commas: `--intervals latin-ext,greek,cyrillic`
+
+You can also specify arbitrary Unicode ranges directly:
+`--intervals 'latin-ext,(0x2190-0x21FF)'`
+
+To list all presets with codepoint counts:
+
+    python3 lib/EpdFont/scripts/fontconvert_sdcard.py --list-presets
+
+### Additional options
+
+`--force-autohint` — force FreeType's auto-hinter instead of the font's native hinting (useful when a font's built-in hints produce poor results at small sizes).
+
+Install custom fonts via the web interface or manual SD card copy.
