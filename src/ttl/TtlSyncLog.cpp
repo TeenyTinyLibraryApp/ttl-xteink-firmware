@@ -32,7 +32,7 @@ std::string nowStamp() {
 bool ttlAppendSyncLog(const std::string& line) {
   constexpr uint64_t kMaxBytes = 64 * 1024;
   constexpr uint64_t kKeepBytes = 32 * 1024;
-  Storage.mkdir(ttl::kBookDirectory);
+  if (!Storage.exists(ttl::kBookDirectory)) Storage.mkdir(ttl::kBookDirectory);
 
   std::string body;
   HalFile input;
