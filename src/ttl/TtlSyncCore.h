@@ -16,12 +16,12 @@
 
 namespace ttl {
 
-inline constexpr const char kVersionNumber[] = "0.1.0";
-inline constexpr const char kVersionLabel[] = "TTL 0.1.0";
+inline constexpr const char kVersionNumber[] = "0.1.1";
+inline constexpr const char kVersionLabel[] = "TTL 0.1.1";
 inline constexpr const char kDefaultServerUrl[] = "https://teenytinylibrary.app";
 inline constexpr const char kBookDirectory[] = "/TTL";
 inline constexpr const char kSyncLogPath[] = "/TTL/ttl-sync-log.txt";
-// v0.1.0 is the recovery baseline: no firmware update checks or flashing UI.
+// v0.1.1 is the recovery baseline: no firmware update checks or flashing UI.
 inline constexpr bool kFirmwareOtaEnabled = false;
 
 inline constexpr size_t kMaxServerUrl = 200;

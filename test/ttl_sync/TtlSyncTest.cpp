@@ -20,7 +20,7 @@ std::string repoFile(const std::string& relative) { return readFile(std::string(
 }  // namespace
 
 TEST(TtlVersion, LabelIsTheRecoveryBaseline) {
-  EXPECT_STREQ(ttl::kVersionNumber, "0.1.0");
+  EXPECT_STREQ(ttl::kVersionNumber, "0.1.1");
   EXPECT_EQ(std::string(ttl::kVersionLabel), std::string("TTL ") + ttl::kVersionNumber);
   EXPECT_FALSE(ttl::kFirmwareOtaEnabled);
   EXPECT_STREQ(ttl::kDefaultServerUrl, "https://teenytinylibrary.app");
@@ -30,8 +30,8 @@ TEST(TtlVersion, LabelIsTheRecoveryBaseline) {
 
 TEST(TtlVersion, ReleaseSourcesKeepTheBaseline) {
   const std::string ini = repoFile("platformio.ini");
-  EXPECT_NE(ini.find("version = 0.1.0"), std::string::npos);
-  EXPECT_NE(ini.find("-DTTL_VERSION_NUMBER=\\\"0.1.0\\\""), std::string::npos);
+  EXPECT_NE(ini.find("version = 0.1.1"), std::string::npos);
+  EXPECT_NE(ini.find("-DTTL_VERSION_NUMBER=\\\"0.1.1\\\""), std::string::npos);
   EXPECT_NE(ini.find("-DTTL_DISABLE_FIRMWARE_OTA=1"), std::string::npos);
   EXPECT_EQ(ini.find("-DCROSSPOINT_VERSION=\\\"${crosspoint.version}\\\""), std::string::npos);
   EXPECT_NE(ini.find("-DCROSSPOINT_VERSION=\\\"TTL ${crosspoint.version}\\\""), std::string::npos);

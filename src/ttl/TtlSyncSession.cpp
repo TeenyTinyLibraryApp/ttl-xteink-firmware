@@ -181,7 +181,8 @@ TtlSyncRunResult ttlRunSync(const TtlSyncCallbacks& callbacks) {
   logLine("manifest " + std::to_string(books.size()));
   if (books.empty()) return finish(true, false, 0, 0, 0, "No books");
 
-  if (!Storage.mkdir(ttl::kBookDirectory)) return finish(false, false, 0, 0, 0, "SD error");
+  if (!Storage.exists(ttl::kBookDirectory) && !Storage.mkdir(ttl::kBookDirectory))
+    return finish(false, false, 0, 0, 0, "SD error");
 
   int saved = 0;
   int skipped = 0;
