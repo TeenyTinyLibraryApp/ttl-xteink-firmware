@@ -48,11 +48,11 @@
 #ifndef TTL_DISABLE_FIRMWARE_OTA
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #endif
-#include "ttl/TtlSyncStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "sync/SyncEngine.h"
+#include "ttl/TtlSyncStore.h"
 #include "util/ButtonNavigator.h"
 #include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
@@ -915,8 +915,8 @@ void setup() {
       break;
   }
 
-  // Output polarity is resolved per render by ActivityManager (night mode
-  // inverts only the reading surfaces), so nothing to restore here.
+    // Output polarity is resolved per render by ActivityManager (night mode
+    // inverts only the reading surfaces), so nothing to restore here.
 
 #ifndef TTL_DISABLE_FIRMWARE_OTA
   if (recoveryFirmwareMode) {

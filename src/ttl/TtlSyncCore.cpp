@@ -65,8 +65,8 @@ void clipUtf8(std::string& value, size_t maxBytes) {
 
 std::string trim(const std::string& value) {
   size_t begin = 0;
-  while (begin < value.size() && (value[begin] == ' ' || value[begin] == '\t' || value[begin] == '\n' ||
-                                  value[begin] == '\r')) {
+  while (begin < value.size() &&
+         (value[begin] == ' ' || value[begin] == '\t' || value[begin] == '\n' || value[begin] == '\r')) {
     ++begin;
   }
   size_t end = value.size();
@@ -187,8 +187,8 @@ class Parser {
 
   bool parseManifest(std::vector<TtlBook>& books, std::string& error) {
     i_ = 0;
-    if (in_.size() >= 3 && static_cast<unsigned char>(in_[0]) == 0xEF &&
-        static_cast<unsigned char>(in_[1]) == 0xBB && static_cast<unsigned char>(in_[2]) == 0xBF) {
+    if (in_.size() >= 3 && static_cast<unsigned char>(in_[0]) == 0xEF && static_cast<unsigned char>(in_[1]) == 0xBB &&
+        static_cast<unsigned char>(in_[2]) == 0xBF) {
       i_ = 3;
     }
     if (!consume('[')) return fail(error, "Bad book list");
@@ -368,10 +368,14 @@ class Parser {
     for (int n = 0; n < 4; ++n) {
       const char c = in_[i_++];
       cp <<= 4;
-      if (c >= '0' && c <= '9') cp += static_cast<uint32_t>(c - '0');
-      else if (c >= 'a' && c <= 'f') cp += static_cast<uint32_t>(c - 'a' + 10);
-      else if (c >= 'A' && c <= 'F') cp += static_cast<uint32_t>(c - 'A' + 10);
-      else return fail(error, "Bad book list");
+      if (c >= '0' && c <= '9')
+        cp += static_cast<uint32_t>(c - '0');
+      else if (c >= 'a' && c <= 'f')
+        cp += static_cast<uint32_t>(c - 'a' + 10);
+      else if (c >= 'A' && c <= 'F')
+        cp += static_cast<uint32_t>(c - 'A' + 10);
+      else
+        return fail(error, "Bad book list");
     }
     return true;
   }
@@ -601,8 +605,7 @@ bool ttlBookDownloadUrl(const std::string& server, const TtlBook& book, std::str
 std::string ttlBuildLoginJson(const std::string& email, const std::string& password) {
   std::string safeEmail = email.size() > kMaxEmail ? email.substr(0, kMaxEmail) : email;
   std::string safePassword = password.size() > kMaxPassword ? password.substr(0, kMaxPassword) : password;
-  return std::string("{\"email\":\"") + jsonEscape(safeEmail) + "\",\"password\":\"" + jsonEscape(safePassword) +
-         "\"}";
+  return std::string("{\"email\":\"") + jsonEscape(safeEmail) + "\",\"password\":\"" + jsonEscape(safePassword) + "\"}";
 }
 
 bool ttlParseManifest(const std::string& json, std::vector<TtlBook>& books, std::string& error) {

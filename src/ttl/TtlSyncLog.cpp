@@ -17,7 +17,7 @@ namespace {
 std::string nowStamp() {
   const time_t now = time(nullptr);
   if (now > 1700000000) {
-    struct tm parts {};
+    struct tm parts{};
     gmtime_r(&now, &parts);
     char buf[32];
     if (std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &parts) > 0) return buf;

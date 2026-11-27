@@ -15,9 +15,7 @@ std::string readFile(const std::string& path) {
   return buffer.str();
 }
 
-std::string repoFile(const std::string& relative) {
-  return readFile(std::string(TTL_REPO_ROOT) + "/" + relative);
-}
+std::string repoFile(const std::string& relative) { return readFile(std::string(TTL_REPO_ROOT) + "/" + relative); }
 
 }  // namespace
 
@@ -72,8 +70,8 @@ TEST(TtlLogin, BuildsEscapedJsonAndParsesTheToken) {
   const std::string body = ttl::ttlBuildLoginJson("a\"b@example.test", "p\\ass\nword");
   EXPECT_EQ(body, "{\"email\":\"a\\\"b@example.test\",\"password\":\"p\\\\ass\\nword\"}");
 
-  const auto ok = ttl::ttlParseLoginResponse(
-      200, "{\"ok\":true,\"token\":\"abcdefghijklmnopqrst\",\"token_type\":\"Bearer\"}");
+  const auto ok =
+      ttl::ttlParseLoginResponse(200, "{\"ok\":true,\"token\":\"abcdefghijklmnopqrst\",\"token_type\":\"Bearer\"}");
   EXPECT_TRUE(ok.ok);
   EXPECT_EQ(ok.token, "abcdefghijklmnopqrst");
 

@@ -32,7 +32,7 @@ Keep these sources and this license file available with the firmware downloads.
 
 To build the same source revision:
 
-1. Clone the repository with `git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader.git`.
+1. Clone this fork with `git clone --recursive https://github.com/TeenyTinyLibraryApp/ttl-xteink-firmware.git`. It is a fork of `https://github.com/crosspoint-reader/crosspoint-reader`.
 2. Select the release tag with `git checkout <release-tag>`.
 3. Download the matching SDK with `git submodule update --init --recursive`.
 4. Follow `docs/contributing/getting-started.md` for the build tools.
