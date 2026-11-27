@@ -3,6 +3,7 @@
 
 #include "ttl/TtlSyncCore.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -78,10 +79,8 @@ std::string trim(const std::string& value) {
 }
 
 bool hasInteriorWhitespace(const std::string& value) {
-  for (char c : value) {
-    if (c == ' ' || c == '\t' || c == '\n' || c == '\r') return true;
-  }
-  return false;
+  return std::any_of(value.begin(), value.end(),
+                     [](const char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; });
 }
 
 bool startsWith(const std::string& value, const char* prefix) {
@@ -143,9 +142,7 @@ std::string jsonEscape(const std::string& value) {
 }
 
 std::string oneLine(std::string value) {
-  for (char& c : value) {
-    if (c == '\n' || c == '\r') c = ' ';
-  }
+  std::replace_if(value.begin(), value.end(), [](const char c) { return c == '\n' || c == '\r'; }, ' ');
   return value;
 }
 
@@ -235,7 +232,7 @@ class Parser {
   size_t i_ = 0;
   int depth_ = 0;
 
-  bool fail(std::string& error, const char* message) {
+  static bool fail(std::string& error, const char* message) {
     error = message;
     return false;
   }
