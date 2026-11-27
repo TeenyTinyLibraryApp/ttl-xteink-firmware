@@ -18,6 +18,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "fontIds.h"
 #include "ttl/TtlSyncCore.h"
 #include "ttl/TtlSyncStore.h"
 
