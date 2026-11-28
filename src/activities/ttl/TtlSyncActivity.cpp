@@ -30,12 +30,14 @@ constexpr int kServer = 1;
 constexpr int kEmail = 2;
 constexpr int kPassword = 3;
 constexpr int kSignOut = 4;
+constexpr int kUpdate = 5;
 
-const char* kLabels[] = {"Sync", "Server", "Email", "Password", "Sign out"};
+const char* kLabels[] = {"Sync", "Server", "Email", "Password", "Sign out", "Check for Update"};
 }  // namespace
 
 TtlSyncActivity::TtlSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiListActivity("TtlSync", renderer, mappedInput) {
+  static_assert(sizeof(kLabels) / sizeof(kLabels[0]) == kRows, "TTL Sync row labels");
   for (int i = 0; i < kRows; ++i) {
     rowItems_[i].label = kLabels[i];
     rowItems_[i].actionValue = static_cast<int16_t>(i);
@@ -61,27 +63,62 @@ void TtlSyncActivity::showResult(const bool ok, const bool cancelled, const std:
     screen_ = Screen::Result;
     resultOk_ = ok;
     resultCancelled_ = cancelled;
+    resultHeading_.clear();
     resultMessage_ = message;
+    pending_ = {};
+  }
+  requestUpdate();
+}
+
+void TtlSyncActivity::showNotice(const char* heading, const std::string& message) {
+  {
+    RenderLock lock(*this);
+    screen_ = Screen::Result;
+    resultOk_ = false;
+    resultCancelled_ = false;
+    resultHeading_ = heading == nullptr ? "" : heading;
+    resultMessage_ = message;
+    pending_ = {};
+  }
+  requestUpdate();
+}
+
+void TtlSyncActivity::backToMenu() {
+  {
+    RenderLock lock(*this);
+    screen_ = Screen::Menu;
+    pending_ = {};
+    offerVersion_.clear();
+    offerSize_.clear();
+    offerNotes_.clear();
+    resultHeading_.clear();
   }
   requestUpdate();
 }
 
 bool TtlSyncActivity::handleCustomInput() {
-  if (screen_ == Screen::Menu) return false;
-  if (screen_ == Screen::Busy) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.isPressed(MappedInputManager::Button::Back)) {
-      cancelRequested_ = true;
-    }
-    return true;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    {
-      RenderLock lock(*this);
-      screen_ = Screen::Menu;
-    }
-    requestUpdate();
+  switch (screen_) {
+    case Screen::Menu:
+      return false;
+    case Screen::Busy:
+      if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+          mappedInput.isPressed(MappedInputManager::Button::Back)) {
+        cancelRequested_ = true;
+      }
+      return true;
+    case Screen::Offer:
+      if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+        startInstall();
+        return true;
+      }
+      if (mappedInput.wasReleased(MappedInputManager::Button::Back)) backToMenu();
+      return true;
+    case Screen::Result:
+      if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+          mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+        backToMenu();
+      }
+      return true;
   }
   return true;
 }
@@ -172,16 +209,13 @@ void TtlSyncActivity::activateIndex(const int index) {
   }
 
   if (index == kSync) startSync();
+  if (index == kUpdate) startUpdateCheck();
 }
 
-void TtlSyncActivity::startSync() {
-  if (!TTL_STORE.hasToken() && (TTL_STORE.email().empty() || !TTL_STORE.hasPassword())) {
-    showResult(false, false, "Add email and password");
-    return;
-  }
+void TtlSyncActivity::connectThen(const NetJob job) {
   wifiUsed_ = true;
   if (wifiConnected()) {
-    runSync();
+    runNetJob(job);
     return;
   }
   auto wifi = makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput);
@@ -190,19 +224,41 @@ void TtlSyncActivity::startSync() {
     showResult(false, false, "Low memory");
     return;
   }
-  startActivityForResult(std::move(wifi), [this](const ActivityResult& result) {
+  startActivityForResult(std::move(wifi), [this, job](const ActivityResult& result) {
     if (result.isCancelled || !wifiConnected()) {
       showResult(false, false, "Wi-Fi needed");
       return;
     }
-    runSync();
+    runNetJob(job);
   });
 }
+
+void TtlSyncActivity::runNetJob(const NetJob job) {
+  switch (job) {
+    case NetJob::Sync:
+      runSync();
+      return;
+    case NetJob::Update:
+      checkForUpdate();
+      return;
+  }
+}
+
+void TtlSyncActivity::startSync() {
+  if (!TTL_STORE.hasToken() && (TTL_STORE.email().empty() || !TTL_STORE.hasPassword())) {
+    showResult(false, false, "Add email and password");
+    return;
+  }
+  connectThen(NetJob::Sync);
+}
+
+void TtlSyncActivity::startUpdateCheck() { connectThen(NetJob::Update); }
 
 void TtlSyncActivity::runSync() {
   {
     RenderLock lock(*this);
     screen_ = Screen::Busy;
+    busyJob_ = BusyJob::Sync;
     phase_ = TtlSyncPhase::Login;
     index_ = 0;
     bookTotal_ = 0;
@@ -262,10 +318,121 @@ void TtlSyncActivity::runSync() {
   showResult(result.ok, result.cancelled, result.message);
 }
 
-void TtlSyncActivity::render(RenderLock&& lock) {
-  if (screen_ == Screen::Menu) {
-    UiListActivity::render(std::move(lock));
+TtlOtaCallbacks TtlSyncActivity::otaCallbacks() {
+  TtlOtaCallbacks callbacks;
+  callbacks.ctx = this;
+  callbacks.cancel = &cancelRequested_;
+  callbacks.onProgress = [](const int percent, void* ctx) {
+    auto* self = static_cast<TtlSyncActivity*>(ctx);
+    self->progressPercent_ = percent;
+    self->requestUpdate(true);
+  };
+  callbacks.pump = [](void* ctx) {
+    auto* self = static_cast<TtlSyncActivity*>(ctx);
+    self->mappedInput.update(true);
+    if (self->mappedInput.isPressed(MappedInputManager::Button::Back) ||
+        self->mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      self->cancelRequested_ = true;
+    }
+    if (self->mappedInput.wasHomeGesture()) {
+      self->cancelRequested_ = true;
+      self->goHomeRequested_ = true;
+    }
+  };
+  return callbacks;
+}
+
+void TtlSyncActivity::checkForUpdate() {
+  {
+    RenderLock lock(*this);
+    screen_ = Screen::Busy;
+    busyJob_ = BusyJob::Check;
+    statusTitle_.clear();
+    bookTotal_ = 0;
+    cancelRequested_ = false;
+    goHomeRequested_ = false;
+    lastPaintMs_ = millis();
+  }
+  requestUpdateAndWait();
+
+  const TtlOtaCheckResult result = ttlCheckFirmwareUpdate(otaCallbacks());
+  // The pump callback sets goHomeRequested_ on the home gesture. cppcheck does
+  // not follow that function pointer, so it treats the flag as still false.
+  // cppcheck-suppress knownConditionTrueFalse
+  if (goHomeRequested_) {
+    onGoHome(HomeMenuItem::TTL_SYNC);
     return;
+  }
+  switch (result.kind) {
+    case TtlOtaCheckKind::UpToDate:
+      showNotice("Up to date", ttl::kVersionLabel);
+      return;
+    case TtlOtaCheckKind::Cancelled:
+      showResult(false, true, "Stopped");
+      return;
+    case TtlOtaCheckKind::Failed:
+      showNotice("Update failed", result.message.empty() ? "Network error" : result.message);
+      return;
+    case TtlOtaCheckKind::Available:
+      break;
+  }
+  {
+    RenderLock lock(*this);
+    pending_ = result.manifest;
+    offerVersion_ = ttl::ttlVersionLabel(pending_.version);
+    offerSize_ = ttl::ttlFormatFirmwareSize(pending_.size);
+    offerNotes_ = pending_.notes;
+    screen_ = Screen::Offer;
+  }
+  requestUpdate();
+}
+
+void TtlSyncActivity::startInstall() {
+  const ttl::TtlFirmwareManifest manifest = pending_;
+  {
+    RenderLock lock(*this);
+    screen_ = Screen::Busy;
+    busyJob_ = BusyJob::Install;
+    statusTitle_.clear();
+    bookTotal_ = 0;
+    progressPercent_ = 0;
+    cancelRequested_ = false;
+    goHomeRequested_ = false;
+    lastPaintMs_ = millis();
+  }
+  requestUpdateAndWait();
+
+  const TtlOtaInstallResult result = ttlInstallFirmwareUpdate(manifest, otaCallbacks());
+  // cppcheck-suppress knownConditionTrueFalse
+  if (goHomeRequested_) {
+    onGoHome(HomeMenuItem::TTL_SYNC);
+    return;
+  }
+  switch (result.kind) {
+    case TtlOtaInstallKind::Ok:
+      showNotice("Update complete. Rebooting...", "");
+      requestUpdateAndWait();
+      delay(1500);
+      ESP.restart();
+      return;
+    case TtlOtaInstallKind::Cancelled:
+      showResult(false, true, "Stopped");
+      return;
+    case TtlOtaInstallKind::Failed:
+      showNotice("Update failed", result.message.empty() ? "Could not flash" : result.message);
+      return;
+  }
+}
+
+void TtlSyncActivity::render(RenderLock&& lock) {
+  switch (screen_) {
+    case Screen::Menu:
+      UiListActivity::render(std::move(lock));
+      return;
+    case Screen::Busy:
+    case Screen::Offer:
+    case Screen::Result:
+      break;
   }
 
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -273,36 +440,77 @@ void TtlSyncActivity::render(RenderLock&& lock) {
   const int pageHeight = renderer.getScreenHeight();
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const int centerY = (pageHeight - lineHeight) / 2;
+  const int side = metrics.contentSidePadding;
   renderer.clearScreen();
   drawChrome();
 
   if (screen_ == Screen::Busy) {
     const char* heading = "Syncing";
-    if (phase_ == TtlSyncPhase::Login) heading = "Signing in";
-    if (phase_ == TtlSyncPhase::Manifest) heading = "Book list";
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight * 2, heading, true, EpdFontFamily::BOLD);
-    if (!statusTitle_.empty()) {
-      renderer.drawCenteredText(UI_10_FONT_ID, centerY, statusTitle_.c_str());
-    } else if (bookTotal_ > 0) {
-      char buf[32];
-      std::snprintf(buf, sizeof(buf), "%d / %d", index_, bookTotal_);
-      renderer.drawCenteredText(UI_10_FONT_ID, centerY, buf);
+    switch (busyJob_) {
+      case BusyJob::Sync:
+        if (phase_ == TtlSyncPhase::Login) heading = "Signing in";
+        if (phase_ == TtlSyncPhase::Manifest) heading = "Book list";
+        break;
+      case BusyJob::Check:
+        heading = "Checking";
+        break;
+      case BusyJob::Install:
+        heading = "Installing";
+        break;
     }
-    int percent = 0;
-    const size_t total = total_.load();
-    if (total > 0) percent = static_cast<int>((bytes_.load() * 100) / total);
-    if (percent > 100) percent = 100;
-    GUI.drawProgressBar(renderer,
-                        Rect{metrics.contentSidePadding, centerY + lineHeight + metrics.verticalSpacing,
-                             pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
-                        percent, 100);
+    renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight * 2, heading, true, EpdFontFamily::BOLD);
+    if (busyJob_ == BusyJob::Sync) {
+      if (!statusTitle_.empty()) {
+        renderer.drawCenteredText(UI_10_FONT_ID, centerY, statusTitle_.c_str());
+      } else if (bookTotal_ > 0) {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%d / %d", index_, bookTotal_);
+        renderer.drawCenteredText(UI_10_FONT_ID, centerY, buf);
+      }
+    }
+    if (busyJob_ != BusyJob::Check) {
+      int percent = 0;
+      if (busyJob_ == BusyJob::Install) {
+        percent = progressPercent_.load();
+      } else {
+        const size_t total = total_.load();
+        if (total > 0) percent = static_cast<int>((bytes_.load() * 100) / total);
+      }
+      if (percent > 100) percent = 100;
+      GUI.drawProgressBar(
+          renderer,
+          Rect{side, centerY + lineHeight + metrics.verticalSpacing, pageWidth - side * 2, metrics.progressBarHeight},
+          percent, 100);
+    }
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  } else {
+  } else if (screen_ == Screen::Offer) {
+    int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 2;
+    renderer.drawCenteredText(UI_10_FONT_ID, y, "Update available", true, EpdFontFamily::BOLD);
+    y += lineHeight + metrics.verticalSpacing;
+    renderer.drawCenteredText(UI_10_FONT_ID, y, offerVersion_.c_str());
+    y += lineHeight + metrics.verticalSpacing;
+    renderer.drawCenteredText(UI_10_FONT_ID, y, offerSize_.c_str());
+    y += lineHeight + metrics.verticalSpacing;
+    const int hintTop = pageHeight - metrics.buttonHintsHeight;
+    if (!offerNotes_.empty() && y < hintTop) {
+      const Rect notes{side, y, pageWidth - side * 2, hintTop - y};
+      UITheme::drawCenteredWrappedText(renderer, notes, UI_10_FONT_ID, offerNotes_.c_str(), 3, true,
+                                       EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::TOP);
+    }
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "Install", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  } else if (screen_ == Screen::Result) {
     const char* heading = "Failed";
-    if (resultOk_) heading = "Done";
-    if (resultCancelled_) heading = "Stopped";
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight, heading, true, EpdFontFamily::BOLD);
+    if (!resultHeading_.empty())
+      heading = resultHeading_.c_str();
+    else if (resultOk_)
+      heading = "Done";
+    else if (resultCancelled_)
+      heading = "Stopped";
+    const Rect head{side, centerY - lineHeight, pageWidth - side * 2, lineHeight * 2};
+    UITheme::drawCenteredWrappedText(renderer, head, UI_10_FONT_ID, heading, 2, true, EpdFontFamily::BOLD,
+                                     UITheme::TextVerticalAlignment::TOP);
     if (!resultMessage_.empty()) {
       renderer.drawCenteredText(UI_10_FONT_ID, centerY + metrics.verticalSpacing, resultMessage_.c_str());
     }

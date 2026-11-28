@@ -4,6 +4,7 @@
 #include "ttl/TtlSyncCore.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -144,6 +145,23 @@ std::string jsonEscape(const std::string& value) {
 std::string oneLine(std::string value) {
   std::replace_if(value.begin(), value.end(), [](const char c) { return c == '\n' || c == '\r'; }, ' ');
   return value;
+}
+
+char asciiLower(char c) {
+  if (c >= 'A' && c <= 'Z') return static_cast<char>(c - 'A' + 'a');
+  return c;
+}
+
+bool isHexDigit(char c) {
+  c = asciiLower(c);
+  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+}
+
+int hexValue(char c) {
+  c = asciiLower(c);
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  return -1;
 }
 
 bool isReservedStem(const std::string& stem) {
@@ -509,6 +527,59 @@ class Parser {
     }
     return fail(error, "Bad book list");
   }
+
+ public:
+  bool parseFirmware(std::string& device, std::string& version, std::string& filename, std::string& downloadUrl,
+                     std::string& sha256, std::string& notes, bool& hasSize, uint64_t& size, std::string& error) {
+    i_ = 0;
+    if (in_.size() >= 3 && static_cast<unsigned char>(in_[0]) == 0xEF && static_cast<unsigned char>(in_[1]) == 0xBB &&
+        static_cast<unsigned char>(in_[2]) == 0xBF) {
+      i_ = 3;
+    }
+    if (!consume('{')) return fail(error, "Bad update info");
+    ++depth_;
+    skipWs();
+    if (consume('}')) {
+      --depth_;
+      skipWs();
+      if (i_ != in_.size()) return fail(error, "Bad update info");
+      return true;
+    }
+    while (true) {
+      std::string key;
+      if (!parseString(key, error)) return fail(error, "Bad update info");
+      if (!consume(':')) return fail(error, "Bad update info");
+      if (key == "device" || key == "version" || key == "filename" || key == "download_url" || key == "sha256" ||
+          key == "notes") {
+        std::string value;
+        if (!parseString(value, error)) return fail(error, "Bad update info");
+        if (key == "device")
+          device = std::move(value);
+        else if (key == "version")
+          version = std::move(value);
+        else if (key == "filename")
+          filename = std::move(value);
+        else if (key == "download_url")
+          downloadUrl = std::move(value);
+        else if (key == "sha256")
+          sha256 = std::move(value);
+        else
+          notes = std::move(value);
+      } else if (key == "size") {
+        if (!parseUint(size, error)) return fail(error, "Bad update info");
+        hasSize = true;
+      } else if (!skipValue(error)) {
+        return fail(error, "Bad update info");
+      }
+      skipWs();
+      if (consume('}')) break;
+      if (!consume(',')) return fail(error, "Bad update info");
+    }
+    --depth_;
+    skipWs();
+    if (i_ != in_.size()) return fail(error, "Bad update info");
+    return true;
+  }
 };
 
 bool acceptableHttpUrl(const std::string& url, std::string& error) {
@@ -699,6 +770,165 @@ std::string ttlSyncSummary(int saved, int skipped, int failed) {
 
 std::string ttlFormatLogLine(const std::string& stamp, const std::string& message) {
   return stamp + " " + oneLine(message);
+}
+
+namespace {
+
+constexpr size_t kMaxFirmwareJson = 4096;
+constexpr size_t kMaxVersionLen = 32;
+
+void stripVersionPrefix(std::string& value) {
+  value = trim(value);
+  if (value.size() >= 4 && asciiLower(value[0]) == 't' && asciiLower(value[1]) == 't' && asciiLower(value[2]) == 'l' &&
+      value[3] == ' ') {
+    value.erase(0, 4);
+    value = trim(value);
+  }
+  if (!value.empty() && (value[0] == 'v' || value[0] == 'V')) value.erase(0, 1);
+}
+
+unsigned readVersionPart(const std::string& value, size_t& index) {
+  constexpr unsigned kCap = 1000000;
+  unsigned part = 0;
+  while (index < value.size() && value[index] >= '0' && value[index] <= '9') {
+    const unsigned digit = static_cast<unsigned>(value[index] - '0');
+    if (part > (kCap - digit) / 10)
+      part = kCap;
+    else
+      part = part * 10 + digit;
+    ++index;
+  }
+  return part;
+}
+
+bool httpDownloadUrl(const std::string& url) {
+  const bool https = startsWith(url, "https://");
+  const bool http = startsWith(url, "http://");
+  if (!https && !http) return false;
+  const size_t host = https ? 8 : 7;
+  return url.size() > host && !hasInteriorWhitespace(url);
+}
+
+}  // namespace
+
+int compareSemVer(const std::string& a, const std::string& b) {
+  auto partsOf = [](const std::string& text) {
+    std::string value = text;
+    stripVersionPrefix(value);
+    unsigned parts[3] = {0, 0, 0};
+    size_t index = 0;
+    for (int part = 0; part < 3; ++part) {
+      parts[part] = readVersionPart(value, index);
+      if (part < 2 && index < value.size() && value[index] == '.')
+        ++index;
+      else
+        break;
+    }
+    return std::array<unsigned, 3>{parts[0], parts[1], parts[2]};
+  };
+  const auto left = partsOf(a);
+  const auto right = partsOf(b);
+  for (int part = 0; part < 3; ++part) {
+    if (left[part] < right[part]) return -1;
+    if (left[part] > right[part]) return 1;
+  }
+  return 0;
+}
+
+std::string ttlFirmwareLatestUrl(const std::string& server) { return server + "/api/firmware/latest"; }
+
+bool ttlFirmwareManifestUsable(const TtlFirmwareManifest& manifest, std::string& error) {
+  const std::string version = trim(manifest.version);
+  if (version.empty() || version.size() > kMaxVersionLen) {
+    error = "Bad version";
+    return false;
+  }
+  if (!httpDownloadUrl(manifest.downloadUrl)) {
+    error = "Bad URL";
+    return false;
+  }
+  if (manifest.size == 0) {
+    error = "Bad size";
+    return false;
+  }
+  if (manifest.sha256.size() != 64 ||
+      !std::all_of(manifest.sha256.begin(), manifest.sha256.end(), [](const char c) { return isHexDigit(c); })) {
+    error = "Bad checksum";
+    return false;
+  }
+  error.clear();
+  return true;
+}
+
+bool ttlParseFirmwareManifest(const std::string& json, TtlFirmwareManifest& manifest, std::string& error) {
+  manifest = {};
+  if (json.size() > kMaxFirmwareJson) {
+    error = "Bad update info";
+    return false;
+  }
+  Parser parser(json);
+  TtlFirmwareManifest parsed;
+  bool hasSize = false;
+  if (!parser.parseFirmware(parsed.device, parsed.version, parsed.filename, parsed.downloadUrl, parsed.sha256,
+                            parsed.notes, hasSize, parsed.size, error)) {
+    return false;
+  }
+  if (!hasSize) parsed.size = 0;
+  parsed.version = trim(parsed.version);
+  parsed.downloadUrl = trim(parsed.downloadUrl);
+  parsed.sha256 = trim(parsed.sha256);
+  if (!ttlFirmwareManifestUsable(parsed, error)) return false;
+  parsed.notes = ttlClipNote(parsed.notes, 96);
+  manifest = std::move(parsed);
+  return true;
+}
+
+std::string ttlVersionLabel(const std::string& version) {
+  std::string value = trim(version);
+  if (value.size() >= 4 && asciiLower(value[0]) == 't' && asciiLower(value[1]) == 't' && asciiLower(value[2]) == 'l' &&
+      value[3] == ' ') {
+    return value;
+  }
+  return std::string("TTL ") + value;
+}
+
+std::string ttlFormatFirmwareSize(uint64_t bytes) {
+  // Tenth of a mebibyte. The app slot is far below 400 MiB, so the whole part fits
+  // in an unsigned and %u stays valid on newlib-nano.
+  const uint64_t tenths = (bytes * 10 + 524288) / 1048576;
+  const unsigned whole = tenths > 4000 ? 4000 : static_cast<unsigned>(tenths / 10);
+  const unsigned frac = tenths > 4000 ? 0 : static_cast<unsigned>(tenths % 10);
+  char buf[24];
+  std::snprintf(buf, sizeof(buf), "%u.%u MB", whole, frac);
+  return buf;
+}
+
+std::string ttlClipNote(const std::string& notes, size_t maxBytes) {
+  std::string line = oneLine(trim(notes));
+  if (maxBytes == 0) return std::string();
+  if (line.size() <= maxBytes) return line;
+  if (maxBytes <= 3) {
+    clipUtf8(line, maxBytes);
+    return line;
+  }
+  clipUtf8(line, maxBytes - 3);
+  const size_t word = line.find_last_of(' ');
+  if (word != std::string::npos && word + 16 >= line.size() && word > 0) line.resize(word);
+  while (!line.empty() && line.back() == ' ') line.pop_back();
+  if (line.empty()) return "...";
+  line += "...";
+  return line;
+}
+
+bool ttlSha256HexMatches(const uint8_t* digest, size_t digestLen, const std::string& hex) {
+  if (digest == nullptr || digestLen != 32 || hex.size() != 64) return false;
+  for (size_t i = 0; i < 32; ++i) {
+    const int hi = hexValue(hex[i * 2]);
+    const int lo = hexValue(hex[i * 2 + 1]);
+    if (hi < 0 || lo < 0) return false;
+    if (digest[i] != static_cast<uint8_t>((hi << 4) | lo)) return false;
+  }
+  return true;
 }
 
 }  // namespace ttl

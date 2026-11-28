@@ -19,19 +19,19 @@ std::string repoFile(const std::string& relative) { return readFile(std::string(
 
 }  // namespace
 
-TEST(TtlVersion, LabelIsTheRecoveryBaseline) {
-  EXPECT_STREQ(ttl::kVersionNumber, "0.1.1");
+TEST(TtlVersion, LabelIsTheRelease) {
+  EXPECT_STREQ(ttl::kVersionNumber, "0.2.0");
   EXPECT_EQ(std::string(ttl::kVersionLabel), std::string("TTL ") + ttl::kVersionNumber);
-  EXPECT_FALSE(ttl::kFirmwareOtaEnabled);
+  EXPECT_TRUE(ttl::kFirmwareOtaEnabled);
   EXPECT_STREQ(ttl::kDefaultServerUrl, "https://teenytinylibrary.app");
   EXPECT_STREQ(ttl::kBookDirectory, "/TTL");
   EXPECT_STREQ(ttl::kSyncLogPath, "/TTL/ttl-sync-log.txt");
 }
 
-TEST(TtlVersion, ReleaseSourcesKeepTheBaseline) {
+TEST(TtlVersion, ReleaseSourcesKeepTheVersion) {
   const std::string ini = repoFile("platformio.ini");
-  EXPECT_NE(ini.find("version = 0.1.1"), std::string::npos);
-  EXPECT_NE(ini.find("-DTTL_VERSION_NUMBER=\\\"0.1.1\\\""), std::string::npos);
+  EXPECT_NE(ini.find("version = 0.2.0"), std::string::npos);
+  EXPECT_NE(ini.find("-DTTL_VERSION_NUMBER=\\\"0.2.0\\\""), std::string::npos);
   EXPECT_NE(ini.find("-DTTL_DISABLE_FIRMWARE_OTA=1"), std::string::npos);
   EXPECT_EQ(ini.find("-DCROSSPOINT_VERSION=\\\"${crosspoint.version}\\\""), std::string::npos);
   EXPECT_NE(ini.find("-DCROSSPOINT_VERSION=\\\"TTL ${crosspoint.version}\\\""), std::string::npos);
@@ -141,6 +141,95 @@ TEST(TtlFilename, StaysASingleEpubSegment) {
   EXPECT_LE(safe.size(), 120u);
   EXPECT_EQ(safe.substr(safe.size() - 5), ".epub");
   EXPECT_EQ(static_cast<unsigned char>(safe[safe.size() - 6]), 'a');
+}
+
+TEST(TtlSemVer, ComparesMajorMinorPatchNumerically) {
+  EXPECT_LT(ttl::compareSemVer("0.1.1", "0.2.0"), 0);
+  EXPECT_EQ(ttl::compareSemVer("0.2.0", "0.2.0"), 0);
+  EXPECT_GT(ttl::compareSemVer("0.10.0", "0.2.0"), 0);
+  EXPECT_EQ(ttl::compareSemVer("v0.2.0", "TTL 0.2.0"), 0);
+  EXPECT_EQ(ttl::compareSemVer("TTL 0.2.0", "0.2.0"), 0);
+  EXPECT_EQ(ttl::compareSemVer("ttl 0.2", "0.2.0"), 0);
+  EXPECT_LT(ttl::compareSemVer("0.2.0", "0.2.1"), 0);
+  EXPECT_GT(ttl::compareSemVer("1.0.0", "0.9.9"), 0);
+}
+
+TEST(TtlFirmwareManifest, ParsesThePortalObject) {
+  const char* json =
+      "{\"device\":\"xteink-x4\",\"version\":\"0.2.0\",\"filename\":\"ttl-x4-v0.2.0.bin\","
+      "\"download_url\":\"https://teenytinylibrary.app/firmware/ttl-x4-v0.2.0.bin\","
+      "\"size\":5757440,\"sha256\":\"0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789abcdef\","
+      "\"notes\":\"Short release note\"}";
+  ttl::TtlFirmwareManifest manifest;
+  std::string error;
+  ASSERT_TRUE(ttl::ttlParseFirmwareManifest(json, manifest, error)) << error;
+  EXPECT_EQ(manifest.device, "xteink-x4");
+  EXPECT_EQ(manifest.version, "0.2.0");
+  EXPECT_EQ(manifest.filename, "ttl-x4-v0.2.0.bin");
+  EXPECT_EQ(manifest.downloadUrl, "https://teenytinylibrary.app/firmware/ttl-x4-v0.2.0.bin");
+  EXPECT_EQ(manifest.size, 5757440u);
+  EXPECT_EQ(manifest.sha256, "0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789abcdef");
+  EXPECT_EQ(manifest.notes, "Short release note");
+  EXPECT_EQ(ttl::ttlVersionLabel(manifest.version), "TTL 0.2.0");
+  EXPECT_EQ(ttl::ttlFormatFirmwareSize(manifest.size), "5.5 MB");
+  EXPECT_EQ(ttl::ttlFirmwareLatestUrl("https://teenytinylibrary.app"),
+            "https://teenytinylibrary.app/api/firmware/latest");
+  EXPECT_TRUE(ttl::ttlFirmwareManifestUsable(manifest, error));
+}
+
+TEST(TtlFirmwareManifest, RejectsUnusableFields) {
+  auto accept = [](const std::string& json) {
+    ttl::TtlFirmwareManifest manifest;
+    std::string error;
+    return ttl::ttlParseFirmwareManifest(json, manifest, error);
+  };
+  const std::string sha(64, 'a');
+  const std::string good = std::string("{\"version\":\"0.2.0\",\"download_url\":\"https://example.test/ttl.bin\",") +
+                           "\"size\":5757440,\"sha256\":\"" + sha + "\"}";
+  EXPECT_TRUE(accept(good));
+  EXPECT_TRUE(accept(std::string("{\"version\":\"0.2.0\",\"download_url\":\"http://example.test/ttl.bin\",") +
+                     "\"size\":1,\"sha256\":\"" + sha + "\",\"notes\":\"line\\nbreak\"}"));
+
+  EXPECT_FALSE(
+      accept("{\"version\":\"\",\"download_url\":\"https://example.test/a\",\"size\":1,\"sha256\":\"" + sha + "\"}"));
+  EXPECT_FALSE(accept("{\"download_url\":\"https://example.test/a\",\"size\":1,\"sha256\":\"" + sha + "\"}"));
+  EXPECT_FALSE(accept("{\"version\":\"0.2.0\",\"download_url\":\"ftp://example.test/a\",\"size\":1,\"sha256\":\"" +
+                      sha + "\"}"));
+  EXPECT_FALSE(accept("{\"version\":\"0.2.0\",\"download_url\":\"https://\",\"size\":1,\"sha256\":\"" + sha + "\"}"));
+  EXPECT_FALSE(accept("{\"version\":\"0.2.0\",\"download_url\":\"https://example.test/a\",\"size\":0,\"sha256\":\"" +
+                      sha + "\"}"));
+  EXPECT_FALSE(
+      accept("{\"version\":\"0.2.0\",\"download_url\":\"https://example.test/a\",\"sha256\":\"" + sha + "\"}"));
+  EXPECT_FALSE(accept("{\"version\":\"0.2.0\",\"download_url\":\"https://example.test/a\",\"size\":1,\"sha256\":\"" +
+                      std::string(63, 'a') + "\"}"));
+  EXPECT_FALSE(accept("{\"version\":\"0.2.0\",\"download_url\":\"https://example.test/a\",\"size\":1,\"sha256\":\"" +
+                      std::string(63, 'a') + "g\"}"));
+  EXPECT_FALSE(accept("[]"));
+  EXPECT_FALSE(
+      accept("{\"version\":\"0.2.0\",\"download_url\":\"https://example.test/a\",\"size\":\"12\",\"sha256\":\"" + sha +
+             "\"}"));
+
+  ttl::TtlFirmwareManifest parsed;
+  std::string error;
+  ASSERT_TRUE(ttl::ttlParseFirmwareManifest(
+      std::string("{\"version\":\"0.3.0\",\"download_url\":\"https://example.test/a.bin\",\"size\":12,\"sha256\":\"") +
+          sha + "\",\"notes\":\"hello\\nthere\"}",
+      parsed, error));
+  EXPECT_EQ(parsed.notes, "hello there");
+
+  uint8_t digest[32] = {};
+  digest[0] = 0xab;
+  digest[31] = 0x0f;
+  std::string hex(64, '0');
+  hex[0] = 'A';
+  hex[1] = 'b';
+  hex[62] = '0';
+  hex[63] = 'F';
+  EXPECT_TRUE(ttl::ttlSha256HexMatches(digest, 32, hex));
+  EXPECT_FALSE(ttl::ttlSha256HexMatches(digest, 32, std::string(64, '0')));
+  EXPECT_FALSE(ttl::ttlSha256HexMatches(digest, 31, hex));
+  EXPECT_EQ(ttl::ttlClipNote(std::string(80, 'a'), 20).size(), 20u);
+  EXPECT_EQ(ttl::ttlClipNote(std::string(80, 'a'), 20).substr(17), "...");
 }
 
 TEST(TtlLog, SummaryAndLinesStaySingleLine) {
