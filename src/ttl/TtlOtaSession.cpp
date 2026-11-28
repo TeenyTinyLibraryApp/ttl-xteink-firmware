@@ -134,7 +134,7 @@ class SlotWriter {
         error_ = "Could not flash";
         return false;
       }
-      size_t eraseLen = std::min(kErase, dest_->size - erased_);
+      size_t eraseLen = std::min<size_t>(kErase, static_cast<size_t>(dest_->size) - erased_);
       eraseLen &= ~static_cast<size_t>(4095);
       if (eraseLen == 0) {
         error_ = "Could not flash";
